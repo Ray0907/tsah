@@ -654,8 +654,19 @@ def focused_ui_element() -> AXUIElementRef | None:
 
 def children_for_element(element: AXUIElementRef, *, max_children: int | None = None) -> list[AXUIElementRef]:
     count = max_children if max_children is not None else 4096
-    raw_values = copy_attribute_values(element, ATTRIBUTE_NAMES["children"], 0, count)
-    return [c_void_p(item) for item in raw_values if item]
+    try:
+        raw_values = copy_attribute_values(element, ATTRIBUTE_NAMES["children"], 0, count)
+    except AXError as exc:
+        if exc.code != -25201:  # kAXErrorIllegalArgument
+            raise
+        # Batched API unsupported — fall back to singular copy
+        raw_values = copy_attribute_value_preserving_elements(element, ATTRIBUTE_NAMES["children"])
+        if not isinstance(raw_values, list):
+            return []
+    result = [c_void_p(item) for item in raw_values if item]
+    if max_children is not None:
+        result = result[:max_children]
+    return result
 
 
 def current_run_loop() -> CFRunLoopRef:
